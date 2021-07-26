@@ -2,6 +2,12 @@
 
 class MessagePack
 {
+    const DATATYPE_BINARY = 2;
+    const DATATYPE_HEXADECIMAL = 16;
+
+    const INT_MIN8 = -256;
+    const INT_MIN16 = -65536;
+    const INT_MIN32 = -2147483648;
 
     public function __construct()
     {}
@@ -9,13 +15,18 @@ class MessagePack
     // json to msgpack
     public function encode($data)
     {
-        if (!$this->valid($data)) {
-            error_log('not json type data.', 0);
+        // decode to array
+        $arrayData = $this->isArray($data) ? $data : json_decode($data, true);
+
+        if (!$this->isArray($arrayData)) {
+            error_log('invalid data type.', 0);
             return false;
         }
-        // decode to array
-        $arrayData = is_array($data) ? $data : json_decode($data, true);
+
         // TODO
+        foreach ($arrayData as $key => $value) {
+            # code...
+        }
     }
 
     // msgpack to json
@@ -25,18 +36,6 @@ class MessagePack
     /**
      *  檢查資料格式
      **/
-    private function valid($data)
-    {
-        // 看能不能解析成陣列
-        $jsonData = json_decode($data, true);
-        if ($this->isNull($jsonData) ||
-            $this->isBoolean($jsonData) ||
-            $this->isInteger($jsonData)) {
-            return false;
-        }
-
-        return true;
-    }
 
     private function isNull($data): bool
     {
@@ -58,15 +57,108 @@ class MessagePack
         return is_string($data);
     }
 
+    private function isArray($data): bool
+    {
+        return is_array($data);
+    }
+
     /**
-     *  轉換資料結構
+     *  各式型別轉換成 msgpack 資料結構 回傳16進位表示
      **/
     public function packNull($data)
-    {}
-    public function packInteger($data)
-    {}
+    {
+        if (!$this->isNull($data)) {
+            return false;
+        }
+
+        $formatNil = "0b11000000";
+
+        return base_convert($formatNil,
+            self::DATATYPE_BINARY, self::DATATYPE_HEXADECIMAL);
+    }
+
     public function packBoolean($data)
-    {}
+    {
+        if (!$this->isBoolean($data)) {
+            return false;
+        }
+
+        $formatFalse = "0b11000010";
+        $formatTrue = "0b11000011";
+
+        $formatBool = ($data) ? $formatTrue : $formatFalse;
+        return base_convert($formatBool,
+            self::DATATYPE_BINARY, self::DATATYPE_HEXADECIMAL);
+    }
+
+    public function packInteger($data)
+    {
+        if (!$this->isInteger($data)) {
+            return false;
+        }
+
+        // 檢查數字大小來判斷要組哪一種
+        if (0 <= $data && $data <= 127) {
+            return $this->formatFixintPositive($data);
+        }
+
+        if (-32 <= $data && $data <= -1) {
+            return $this->formatFixintNegative($data);
+        }
+
+        if (self::INT_MIN8 <= $data && $data < abs(self::INT_MIN8)) {
+            return $this->formatInt8($data);
+        }
+
+        if (self::INT_MIN16 <= $data && $data < abs(self::INT_MIN16)) {
+            return $this->formatInt16($data);
+        }
+
+        if (self::INT_MIN32 <= $data && $data < abs(self::INT_MIN32)) {
+            return $this->formatInt32($data);
+        }
+
+        if (PHP_INT_MIN <= $data && $data <= PHP_INT_MAX) {
+            return $this->formatInt64($data);
+        }
+    }
+
     public function packString($data)
     {}
+
+    /**
+     *  messagepack formats
+     **/
+    private function formatFixintPositive($data)
+    {
+        return base_convert(sprintf("%08b", $a),
+            self::DATATYPE_BINARY, self::DATATYPE_HEXADECIMAL);
+    }
+
+    private function formatFixintNegative($data)
+    {
+        $decMatchBin = 32 - abs($data);
+        return base_convert("111" . sprintf("%05b", $decMatchBin),
+            self::DATATYPE_BINARY, self::DATATYPE_HEXADECIMAL);
+    }
+
+    private function formatInt8($data)
+    {
+        $prefix = "0xd0";
+    }
+
+    private function formatInt16($data)
+    {
+        $prefix = "0xd1";
+    }
+
+    private function formatInt32($data)
+    {
+        $prefix = "0xd2";
+    }
+
+    private function formatInt64($data)
+    {
+        $prefix = "0xd3";
+    }
 }
