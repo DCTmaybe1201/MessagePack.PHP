@@ -5,9 +5,9 @@ class MessagePack
     const DATATYPE_BINARY = 2;
     const DATATYPE_HEXADECIMAL = 16;
 
-    const INT_MIN8 = -256;
-    const INT_MIN16 = -65536;
-    const INT_MIN32 = -2147483648;
+    const BIN_POWER_8 = 256;
+    const BIN_POWER_16 = 65536;
+    const BIN_POWER_32 = 4294967296;
 
     public function __construct()
     {}
@@ -106,15 +106,15 @@ class MessagePack
             return $this->formatFixintNegative($data);
         }
 
-        if (self::INT_MIN8 <= $data && $data < abs(self::INT_MIN8)) {
+        if (-(self::BIN_POWER_8 / 2) <= $data && $data < self::BIN_POWER_8 / 2) {
             return $this->formatInt8($data);
         }
 
-        if (self::INT_MIN16 <= $data && $data < abs(self::INT_MIN16)) {
+        if (-(self::BIN_POWER_16 / 2) <= $data && $data < self::BIN_POWER_16 / 2) {
             return $this->formatInt16($data);
         }
 
-        if (self::INT_MIN32 <= $data && $data < abs(self::INT_MIN32)) {
+        if (-(self::BIN_POWER_32 / 2) <= $data && $data < self::BIN_POWER_32 / 2) {
             return $this->formatInt32($data);
         }
 
@@ -137,28 +137,58 @@ class MessagePack
 
     private function formatFixintNegative($data)
     {
-        $decMatchBin = 32 - abs($data);
-        return base_convert("111" . sprintf("%05b", $decMatchBin),
+        $neg2pos = 32 - abs($data);
+        return base_convert("111" . sprintf("%05b", $neg2pos),
             self::DATATYPE_BINARY, self::DATATYPE_HEXADECIMAL);
     }
 
     private function formatInt8($data)
     {
         $prefix = "0xd0";
+
+        if (0 <= $data) {
+            return $prefix . base_convert(sprintf("%08b", $data),
+                self::DATATYPE_BINARY, self::DATATYPE_HEXADECIMAL);
+        } else {
+            $neg2pos = self::BIN_POWER_8 - abs($data);
+            return $prefix . base_convert(sprintf("%08b", $neg2pos),
+                self::DATATYPE_BINARY, self::DATATYPE_HEXADECIMAL);
+        }
     }
 
     private function formatInt16($data)
     {
         $prefix = "0xd1";
+
+        if (0 <= $data) {
+            return $prefix . base_convert(sprintf("%016b", $data),
+                self::DATATYPE_BINARY, self::DATATYPE_HEXADECIMAL);
+        } else {
+            $neg2pos = self::BIN_POWER_16 - abs($data);
+            return $prefix . base_convert(sprintf("%016b", $neg2pos),
+                self::DATATYPE_BINARY, self::DATATYPE_HEXADECIMAL);
+        }
     }
 
     private function formatInt32($data)
     {
         $prefix = "0xd2";
+
+        if (0 <= $data) {
+            return $prefix . base_convert(sprintf("%032b", $data),
+                self::DATATYPE_BINARY, self::DATATYPE_HEXADECIMAL);
+        } else {
+            $neg2pos = self::BIN_POWER_32 - abs($data);
+            return $prefix . base_convert(sprintf("%032b", $neg2pos),
+                self::DATATYPE_BINARY, self::DATATYPE_HEXADECIMAL);
+        }
     }
 
     private function formatInt64($data)
     {
         $prefix = "0xd3";
+
+        return $prefix . base_convert(sprintf("%064b", $data),
+            self::DATATYPE_BINARY, self::DATATYPE_HEXADECIMAL);
     }
 }
