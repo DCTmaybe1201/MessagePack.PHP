@@ -5,6 +5,7 @@ class MessagePack
     const DATATYPE_BINARY = 2;
     const DATATYPE_HEXADECIMAL = 16;
 
+    const BIN_POWER_5 = 32;
     const BIN_POWER_8 = 256;
     const BIN_POWER_16 = 65536;
     const BIN_POWER_32 = 4294967296;
@@ -22,6 +23,8 @@ class MessagePack
             error_log('invalid data type.', 0);
             return false;
         }
+
+        $returnData = "";
 
         // TODO
         foreach ($arrayData as $key => $value) {
@@ -98,11 +101,11 @@ class MessagePack
         }
 
         // 檢查數字大小來判斷要組哪一種
-        if (0 <= $data && $data <= 127) {
+        if (0 <= $data && $data < self::BIN_POWER_8 / 2) {
             return $this->formatFixintPositive($data);
         }
 
-        if (-32 <= $data && $data <= -1) {
+        if (-self::BIN_POWER_5 <= $data && $data < 0) {
             return $this->formatFixintNegative($data);
         }
 
@@ -124,10 +127,31 @@ class MessagePack
     }
 
     public function packString($data)
-    {}
+    {
+        if (!$this->isString($data)) {
+            return false;
+        }
+
+        // 中文字串的情境在研究一下，不確定能不能直接換 mb_strlen
+        if (strlen($data) < self::BIN_POWER_5) {
+            return $this->formatFixstr($data);
+        }
+
+        if (strlen($data) < self::BIN_POWER_8) {
+            return $this->formatStr8($data);
+        }
+
+        if (strlen($data) < self::BIN_POWER_16) {
+            return $this->formatStr16($data);
+        }
+
+        if (strlen($data) < self::BIN_POWER_32) {
+            return $this->formatStr32($data);
+        }
+    }
 
     /**
-     *  messagepack formats
+     *  messagepack formats integer
      **/
     private function formatFixintPositive($data)
     {
@@ -137,7 +161,7 @@ class MessagePack
 
     private function formatFixintNegative($data)
     {
-        $neg2pos = 32 - abs($data);
+        $neg2pos = self::BIN_POWER_5 - abs($data);
         return base_convert("111" . sprintf("%05b", $neg2pos),
             self::DATATYPE_BINARY, self::DATATYPE_HEXADECIMAL);
     }
@@ -190,5 +214,42 @@ class MessagePack
 
         return $prefix . base_convert(sprintf("%064b", $data),
             self::DATATYPE_BINARY, self::DATATYPE_HEXADECIMAL);
+    }
+
+    /**
+     *  messagepack formats string
+     **/
+    private function formatFixstr($data)
+    {
+        $length = base_convert("101" . sprintf("%05b", strlen($data)),
+            self::DATATYPE_BINARY, self::DATATYPE_HEXADECIMAL);
+        return $length . $data;
+    }
+
+    private function formatStr8($data)
+    {
+        $prefix = "0xd9";
+
+        $length = base_convert(sprintf("%08b", strlen($data)),
+            self::DATATYPE_BINARY, self::DATATYPE_HEXADECIMAL);
+        return $prefix . $length . $data;
+    }
+
+    private function formatStr16($data)
+    {
+        $prefix = "0xda";
+
+        $length = base_convert(sprintf("%016b", strlen($data)),
+            self::DATATYPE_BINARY, self::DATATYPE_HEXADECIMAL);
+        return $prefix . $length . $data;
+    }
+
+    private function formatStr32($data)
+    {
+        $prefix = "0xdb";
+
+        $length = base_convert(sprintf("%032b", strlen($data)),
+            self::DATATYPE_BINARY, self::DATATYPE_HEXADECIMAL);
+        return $prefix . $length . $data;
     }
 }
