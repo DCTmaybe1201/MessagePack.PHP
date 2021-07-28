@@ -24,21 +24,62 @@ class MessagePack
             return false;
         }
 
-        $returnData = "";
-
-        // TODO
-        foreach ($arrayData as $key => $value) {
-            # code...
+        if (empty($arrayData)) {
+            return $this->packNull(null);
         }
+
+        return $this->parseArray($arrayData);
     }
 
     // msgpack to json
     public function decode($data)
     {}
 
+    private function parseArray(&$data)
+    {
+        $msgPackData = "";
+
+        $msgPackData .= $this->getMapPrefix(count($data));
+        foreach ($data as $key => $value) {
+            $msgPackData .= parseTypes($key);
+            $msgPackData .= parseTypes($value);
+        }
+
+        return $msgPackData;
+    }
+
     /**
      *  檢查資料格式
      **/
+
+    private function parseTypes($data)
+    {
+        switch (gettype($data)) {
+            case 'NULL':
+                return $this->packNull($data);
+                break;
+
+            case 'boolean':
+                return $this->packBoolean($data);
+                break;
+
+            case 'integer':
+                return $this->packInteger($data);
+                break;
+
+            case 'string':
+                return $this->packString($data);
+                break;
+
+            case 'array':
+                return $this->parseArray($data);
+                break;
+
+            default:
+                error_log('undefined case: ' . gettype($data), 0);
+                break;
+        }
+    }
 
     private function isNull($data): bool
     {
@@ -134,19 +175,37 @@ class MessagePack
 
         // 中文字串的情境在研究一下，不確定能不能直接換 mb_strlen
         if (strlen($data) < self::BIN_POWER_5) {
-            return $this->formatFixstr($data);
+            $length = $this->formatFixstr($data);
         }
 
         if (strlen($data) < self::BIN_POWER_8) {
-            return $this->formatStr8($data);
+            $length = $this->formatStr8($data);
         }
 
         if (strlen($data) < self::BIN_POWER_16) {
-            return $this->formatStr16($data);
+            $length = $this->formatStr16($data);
         }
 
         if (strlen($data) < self::BIN_POWER_32) {
-            return $this->formatStr32($data);
+            $length = $this->formatStr32($data);
+        }
+
+        // 字面呈現可以長得跟官網一樣，但實際傳送要怎樣才不會全部被當成字串??
+        return $length . $data;
+    }
+
+    public function getMapPrefix($length)
+    {
+        if ($length < 16) {
+            return $this->formatFixmap($length);
+        }
+
+        if ($length < self::BIN_POWER_16) {
+            return $this->formatMap16($length);
+        }
+
+        if ($length < self::BIN_POWER_32) {
+            return $this->formatMap32($length);
         }
     }
 
@@ -155,7 +214,7 @@ class MessagePack
      **/
     private function formatFixintPositive($data)
     {
-        return base_convert(sprintf("%08b", $a),
+        return base_convert(sprintf("%08b", $data),
             self::DATATYPE_BINARY, self::DATATYPE_HEXADECIMAL);
     }
 
@@ -221,35 +280,56 @@ class MessagePack
      **/
     private function formatFixstr($data)
     {
-        $length = base_convert("101" . sprintf("%05b", strlen($data)),
+        return base_convert("101" . sprintf("%05b", strlen($data)),
             self::DATATYPE_BINARY, self::DATATYPE_HEXADECIMAL);
-        return $length . $data;
     }
 
     private function formatStr8($data)
     {
         $prefix = "0xd9";
 
-        $length = base_convert(sprintf("%08b", strlen($data)),
+        return $prefix . base_convert(sprintf("%08b", strlen($data)),
             self::DATATYPE_BINARY, self::DATATYPE_HEXADECIMAL);
-        return $prefix . $length . $data;
     }
 
     private function formatStr16($data)
     {
         $prefix = "0xda";
 
-        $length = base_convert(sprintf("%016b", strlen($data)),
+        return $prefix . base_convert(sprintf("%016b", strlen($data)),
             self::DATATYPE_BINARY, self::DATATYPE_HEXADECIMAL);
-        return $prefix . $length . $data;
     }
 
     private function formatStr32($data)
     {
         $prefix = "0xdb";
 
-        $length = base_convert(sprintf("%032b", strlen($data)),
+        return $prefix . base_convert(sprintf("%032b", strlen($data)),
             self::DATATYPE_BINARY, self::DATATYPE_HEXADECIMAL);
-        return $prefix . $length . $data;
+    }
+
+    /**
+     *  messagepack formats map
+     **/
+    private function formatFixmap($length)
+    {
+        return base_convert("1000" . sprintf("%04b", $length),
+            self::DATATYPE_BINARY, self::DATATYPE_HEXADECIMAL);
+    }
+
+    private function formatMap16($length)
+    {
+        $prefix = "0xde";
+
+        return $prefix . base_convert(sprintf("%016b", $length),
+            self::DATATYPE_BINARY, self::DATATYPE_HEXADECIMAL);
+    }
+
+    private function formatMap32($length)
+    {
+        $prefix = "0xdf";
+
+        return $prefix . base_convert(sprintf("%032b", $length),
+            self::DATATYPE_BINARY, self::DATATYPE_HEXADECIMAL);
     }
 }
