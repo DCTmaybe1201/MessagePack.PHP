@@ -5,6 +5,7 @@ class MessagePack
     const DATATYPE_BINARY = 2;
     const DATATYPE_HEXADECIMAL = 16;
 
+    const BIN_POWER_4 = 16;
     const BIN_POWER_5 = 32;
     const BIN_POWER_8 = 256;
     const BIN_POWER_16 = 65536;
@@ -17,9 +18,9 @@ class MessagePack
     public function encode($data)
     {
         // decode to array
-        $arrayData = $this->isArray($data) ? $data : json_decode($data, true);
+        $arrayData = is_array($data) ? $data : json_decode($data, true);
 
-        if (!$this->isArray($arrayData)) {
+        if (!is_array($arrayData)) {
             error_log('invalid data type.', 0);
             return false;
         }
@@ -39,10 +40,10 @@ class MessagePack
     {
         $msgPackData = "";
 
-        $msgPackData .= $this->getMapPrefix(count($data));
+        $msgPackData .= strtoupper($this->getMapPrefix(count($data)));
         foreach ($data as $key => $value) {
-            $msgPackData .= parseTypes($key);
-            $msgPackData .= parseTypes($value);
+            $msgPackData .= $this->parseTypes($key);
+            $msgPackData .= $this->parseTypes($value);
         }
 
         return $msgPackData;
@@ -56,19 +57,23 @@ class MessagePack
     {
         switch (gettype($data)) {
             case 'NULL':
-                return $this->packNull($data);
+                return strtoupper($this->packNull($data));
                 break;
 
             case 'boolean':
-                return $this->packBoolean($data);
+                return strtoupper($this->packBoolean($data));
                 break;
 
             case 'integer':
-                return $this->packInteger($data);
+                return strtoupper($this->packInteger($data));
+                break;
+
+            case 'double':
+                return strtoupper($this->packFloat($data));
                 break;
 
             case 'string':
-                return $this->packString($data);
+                return strtoupper($this->getStrPrefix($data)) . $data;
                 break;
 
             case 'array':
@@ -81,37 +86,12 @@ class MessagePack
         }
     }
 
-    private function isNull($data): bool
-    {
-        return is_null($data);
-    }
-
-    private function isBoolean($data): bool
-    {
-        return is_bool($data);
-    }
-
-    private function isInteger($data): bool
-    {
-        return is_int($data);
-    }
-
-    private function isString($data): bool
-    {
-        return is_string($data);
-    }
-
-    private function isArray($data): bool
-    {
-        return is_array($data);
-    }
-
     /**
      *  各式型別轉換成 msgpack 資料結構 回傳16進位表示
      **/
     public function packNull($data)
     {
-        if (!$this->isNull($data)) {
+        if (!is_null($data)) {
             return false;
         }
 
@@ -123,7 +103,7 @@ class MessagePack
 
     public function packBoolean($data)
     {
-        if (!$this->isBoolean($data)) {
+        if (!is_bool($data)) {
             return false;
         }
 
@@ -137,7 +117,7 @@ class MessagePack
 
     public function packInteger($data)
     {
-        if (!$this->isInteger($data)) {
+        if (!is_integer($data)) {
             return false;
         }
 
@@ -167,36 +147,42 @@ class MessagePack
         }
     }
 
-    public function packString($data)
+    public function packFloat($data)
     {
-        if (!$this->isString($data)) {
+        // TODO
+    }
+
+    public function getStrPrefix($data)
+    {
+        if (!is_string($data)) {
             return false;
         }
 
         // 中文字串的情境在研究一下，不確定能不能直接換 mb_strlen
         if (strlen($data) < self::BIN_POWER_5) {
-            $length = $this->formatFixstr($data);
+            return $this->formatFixstr($data);
         }
 
         if (strlen($data) < self::BIN_POWER_8) {
-            $length = $this->formatStr8($data);
+            return $this->formatStr8($data);
         }
 
         if (strlen($data) < self::BIN_POWER_16) {
-            $length = $this->formatStr16($data);
+            return $this->formatStr16($data);
         }
 
         if (strlen($data) < self::BIN_POWER_32) {
-            $length = $this->formatStr32($data);
+            return $this->formatStr32($data);
         }
-
-        // 字面呈現可以長得跟官網一樣，但實際傳送要怎樣才不會全部被當成字串??
-        return $length . $data;
     }
 
     public function getMapPrefix($length)
     {
-        if ($length < 16) {
+        if (!is_integer($length)) {
+            return false;
+        }
+
+        if ($length < self::BIN_POWER_4) {
             return $this->formatFixmap($length);
         }
 
@@ -214,7 +200,9 @@ class MessagePack
      **/
     private function formatFixintPositive($data)
     {
-        return base_convert(sprintf("%08b", $data),
+        // MEMO 進來的數字小於16只會回傳一位數
+        $prefix = ($data < self::BIN_POWER_4) ? "0" : "";
+        return $prefix . base_convert(sprintf("%08b", $data),
             self::DATATYPE_BINARY, self::DATATYPE_HEXADECIMAL);
     }
 
@@ -227,7 +215,7 @@ class MessagePack
 
     private function formatInt8($data)
     {
-        $prefix = "0xd0";
+        $prefix = "d0";
 
         if (0 <= $data) {
             return $prefix . base_convert(sprintf("%08b", $data),
@@ -241,7 +229,7 @@ class MessagePack
 
     private function formatInt16($data)
     {
-        $prefix = "0xd1";
+        $prefix = "d1";
 
         if (0 <= $data) {
             return $prefix . base_convert(sprintf("%016b", $data),
@@ -255,7 +243,7 @@ class MessagePack
 
     private function formatInt32($data)
     {
-        $prefix = "0xd2";
+        $prefix = "d2";
 
         if (0 <= $data) {
             return $prefix . base_convert(sprintf("%032b", $data),
@@ -269,7 +257,7 @@ class MessagePack
 
     private function formatInt64($data)
     {
-        $prefix = "0xd3";
+        $prefix = "d3";
 
         return $prefix . base_convert(sprintf("%064b", $data),
             self::DATATYPE_BINARY, self::DATATYPE_HEXADECIMAL);
@@ -286,7 +274,7 @@ class MessagePack
 
     private function formatStr8($data)
     {
-        $prefix = "0xd9";
+        $prefix = "d9";
 
         return $prefix . base_convert(sprintf("%08b", strlen($data)),
             self::DATATYPE_BINARY, self::DATATYPE_HEXADECIMAL);
@@ -294,7 +282,7 @@ class MessagePack
 
     private function formatStr16($data)
     {
-        $prefix = "0xda";
+        $prefix = "da";
 
         return $prefix . base_convert(sprintf("%016b", strlen($data)),
             self::DATATYPE_BINARY, self::DATATYPE_HEXADECIMAL);
@@ -302,7 +290,7 @@ class MessagePack
 
     private function formatStr32($data)
     {
-        $prefix = "0xdb";
+        $prefix = "db";
 
         return $prefix . base_convert(sprintf("%032b", strlen($data)),
             self::DATATYPE_BINARY, self::DATATYPE_HEXADECIMAL);
@@ -319,7 +307,7 @@ class MessagePack
 
     private function formatMap16($length)
     {
-        $prefix = "0xde";
+        $prefix = "de";
 
         return $prefix . base_convert(sprintf("%016b", $length),
             self::DATATYPE_BINARY, self::DATATYPE_HEXADECIMAL);
@@ -327,7 +315,7 @@ class MessagePack
 
     private function formatMap32($length)
     {
-        $prefix = "0xdf";
+        $prefix = "df";
 
         return $prefix . base_convert(sprintf("%032b", $length),
             self::DATATYPE_BINARY, self::DATATYPE_HEXADECIMAL);
