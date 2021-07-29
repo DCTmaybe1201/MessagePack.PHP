@@ -12,4 +12,4 @@ $jsonData = json_encode($msgpack_array);
 $message = new MessagePack();
 $msgpack = $message->encode($jsonData);
 
-echo $msgpack;
+echo $msgpack . PHP_EOL;
