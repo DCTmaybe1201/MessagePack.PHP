@@ -19,3 +19,10 @@ $msgpack = $message->encode($jsonData);
 // or encode array directly
 $msgpack = $message->encode($msgpack_array);
 ```
+
+You can change msgpack_array in the file `index.php`.
+
+clone this repo and execute
+```
+php index.php
+```
